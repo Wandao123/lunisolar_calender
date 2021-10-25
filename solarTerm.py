@@ -53,7 +53,7 @@ class SolarTermName(Enum):
 # Ref: https://emotionexplorer.blog.fc2.com/blog-entry-325.html
 class SolarTerm:
     def __init__(self, year: int) -> None:
-        self.__dates: Dict['SolarTermName', 'datetime'] = {}
+        self.__dateOf: Dict['SolarTermName', 'datetime'] = {}
         url = 'https://eco.mtk.nao.ac.jp/cgi-bin/koyomi/cande/phenomena_s.cgi'
         html = requests.post(url, data={'year': str(year)})  # チェックボックスを外す方法？
         html.raise_for_status()
@@ -62,8 +62,8 @@ class SolarTerm:
         for row in soup.table.find_all('tr'):
             columns = row.find_all('td')
             if len(columns) > 0 and columns[3].text == '二十四節気':
-                self.__dates[SolarTermName(columns[5].text[:2])] = datetime.fromisoformat(columns[0].text.replace('/', '-') + 'T' + columns[1].text + ':00')
+                self.__dateOf[SolarTermName(columns[5].text[:2])] = datetime.fromisoformat(columns[0].text.replace('/', '-') + 'T' + columns[1].text + ':00')
 
     @property
-    def Dates(self) -> Dict['SolarTermName', 'datetime']:
-        return self.__dates
+    def DateOf(self) -> Dict['SolarTermName', 'datetime']:
+        return self.__dateOf
