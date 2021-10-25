@@ -30,7 +30,7 @@ class PhaseName(Enum):
 # Ref: https://emotionexplorer.blog.fc2.com/blog-entry-325.html
 class LunarPhase:
     def __init__(self, year: int) -> None:
-        self.__dates: Dict['PhaseName', List['datetime']] = {phase: [] for phase in PhaseName}
+        self.__datesOf: Dict['PhaseName', List['datetime']] = {phase: [] for phase in PhaseName}
         #url = 'https://eco.mtk.nao.ac.jp/koyomi/yoko/2020/rekiyou203.html'
         url = 'https://eco.mtk.nao.ac.jp/cgi-bin/koyomi/cande/phenomena_p.cgi'
         html = requests.post(url, data={'year': str(year)})
@@ -40,8 +40,8 @@ class LunarPhase:
         for row in soup.table.find_all('tr'):
             columns = row.find_all('td')
             if len(columns) > 0:
-                self.__dates[PhaseName(columns[3].text)].append(datetime.fromisoformat(columns[0].text.replace('/', '-') + 'T' + columns[1].text + ':00'))
+                self.__datesOf[PhaseName(columns[3].text)].append(datetime.fromisoformat(columns[0].text.replace('/', '-') + 'T' + columns[1].text + ':00'))
 
     @property
-    def Dates(self) -> List['datetime']:
-        return self.__dates
+    def DatesOf(self) -> List['datetime']:
+        return self.__datesOf
