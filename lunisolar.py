@@ -36,7 +36,7 @@ class PhaseName(Enum):
 # Ref: https://emotionexplorer.blog.fc2.com/blog-entry-325.html
 class LunarPhase:
     def __init__(self, year: int) -> None:
-        self.__datesOf: Dict['PhaseName', List[dt.datetime]] = {phase: [] for phase in PhaseName}
+        self.__datesOf: Dict[PhaseName, List[dt.datetime]] = {phase: [] for phase in PhaseName if phase != PhaseName.Null}
         #url = 'https://eco.mtk.nao.ac.jp/koyomi/yoko/2020/rekiyou203.html'
         url = 'https://eco.mtk.nao.ac.jp/cgi-bin/koyomi/cande/phenomena_p.cgi'
         html = requests.post(url, data={'year': str(year)})
@@ -49,7 +49,7 @@ class LunarPhase:
                 self.__datesOf[PhaseName(columns[3].text)].append(dt.datetime.fromisoformat(columns[0].text.replace('/', '-') + 'T' + columns[1].text + ':00'))
 
     @property
-    def DatesOf(self) -> List[dt.datetime]:
+    def DatesOf(self) -> Dict[PhaseName, List[dt.datetime]]:
         return self.__datesOf
 
 class TermName(Enum):
@@ -100,7 +100,7 @@ class TermName(Enum):
 # Ref: https://emotionexplorer.blog.fc2.com/blog-entry-325.html
 class SolarTerm:
     def __init__(self, year: int) -> None:
-        self.__dateOf: Dict['TermName', dt.datetime] = {}
+        self.__dateOf: Dict[TermName, dt.datetime] = {}
         url = 'https://eco.mtk.nao.ac.jp/cgi-bin/koyomi/cande/phenomena_s.cgi'
         html = requests.post(url, data={'year': str(year)})  # チェックボックスを外す方法？
         html.raise_for_status()
@@ -112,7 +112,7 @@ class SolarTerm:
                 self.__dateOf[TermName(columns[5].text[:2])] = dt.datetime.fromisoformat(columns[0].text.replace('/', '-') + 'T' + columns[1].text + ':00')
 
     @property
-    def DateOf(self) -> Dict['TermName', dt.datetime]:
+    def DateOf(self) -> Dict[TermName, dt.datetime]:
         return self.__dateOf
 
 class Calender:
@@ -126,9 +126,11 @@ class Calender:
         start, end = self.__calcDateRange()
         self.__dataFrame = pd.DataFrame(
             [],
-            index=pd.date_range(start=start.date(), end=end.date(), name='date'),
-            columns=['lunar phase', 'solar term', 'day', 'month', 'year', 'leap month']  # 閏月は真偽値。
+            index=pd.date_range(start=start.date(), end=end.date(), name='太陽暦'),
+            columns=['月相', '二十四節気', '日', '月', '年', '閏']  # 閏は真偽値。
         )
+        self.__fillLunarPhase()
+        self.__fillSolarTerm()
 
     def __calcDateRange(self) -> Tuple[dt.datetime]:
         newMoonDates: List[dt.datetime] =\
@@ -144,11 +146,33 @@ class Calender:
                 end = newMoonDates[i + 1]
         return start, end
 
+    def __fillLunarPhase(self):
+        self.__dataFrame.loc[:, '月相'] = PhaseName.Null
+        for phaseName in PhaseName:
+            previous: List[dt.datetime] = self.__previousLunarPhase.DatesOf.get(phaseName)
+            current: List[dt.datetime] = self.__currentLunarPhase.DatesOf.get(phaseName)
+            if previous and current:
+                previous = [datetime for datetime in previous if datetime >= self.__dataFrame.index.to_pydatetime()[0]]
+                #current = [datetime for datetime in current if datetime <= self.__dataFrame.index.to_pydatetime()[-1]]  # 今年の月相の日付は必ず範囲内。
+                self.__dataFrame.loc[map(lambda datetime: datetime.date().isoformat(), previous + current), '月相'] = phaseName
+        self.__dataFrame.iloc[-1]['月相'] = PhaseName.NewMoon
+
+    def __fillSolarTerm(self):
+        self.__dataFrame.loc[:, '二十四節気'] = TermName.Null
+        self.__dataFrame.loc[map(lambda datetime: datetime.date().isoformat(), self.__currentSolarTerm.DateOf.values()), '二十四節気'] = list(self.__currentSolarTerm.DateOf.keys())
+        self.__dataFrame.at[self.__previousSolarTerm.DateOf[TermName.WinterSolstice].date().isoformat(), '二十四節気'] = TermName.WinterSolstice
+
     def LunarDate(self, date: dt.date) -> Dict[str, int]:
         raw = self.__dataFrame.loc[date.isoformat()]
         return {
-            'day': raw['day'],
-            'month': raw['month'],
-            'year': raw['year'],
-            'leap month': 1 if raw['leap month'] else 0
+            'day': raw['日'],
+            'month': raw['月'],
+            'year': raw['年'],
+            'leap month': 1 if raw['閏'] else 0
         }
+
+    def Write(self, filename: str='') -> None:
+        if filename:
+            self.__dataFrame.to_csv(filename, encoding='utf_8_sig')
+        else:
+            print(self.__dataFrame)
