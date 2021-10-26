@@ -121,6 +121,16 @@ class Calender:
         self.__currentLunarPhase = LunarPhase(year)
         self.__previousSolarTerm = SolarTerm(year - 1)
         self.__currentSolarTerm = SolarTerm(year)
+        start: dt.datetime
+        end: dt.datetime
+        start, end = self.__calcDateRange()
+        self.__dataFrame = pd.DataFrame(
+            [],
+            index=pd.date_range(start=start.date(), end=end.date(), name='date'),
+            columns=['lunar phase', 'solar term', 'day', 'month', 'year', 'leap month']  # 閏月は真偽値。
+        )
+
+    def __calcDateRange(self) -> Tuple[dt.datetime]:
         newMoonDates: List[dt.datetime] =\
             self.__previousLunarPhase.DatesOf[PhaseName.NewMoon]\
             + self.__currentLunarPhase.DatesOf[PhaseName.NewMoon]\
@@ -132,11 +142,7 @@ class Calender:
                 start = newMoonDates[i]
             if newMoonDates[i] <= self.__currentSolarTerm.DateOf[TermName.WinterSolstice] < newMoonDates[i + 1]:
                 end = newMoonDates[i + 1]
-        self.__dataFrame = pd.DataFrame(
-            [],
-            index=pd.date_range(start=start.date(), end=end.date(), name='date'),
-            columns=['lunar phase', 'solar term', 'day', 'month', 'year', 'leap month']  # 閏月は真偽値。
-        )
+        return start, end
 
     def LunarDate(self, date: dt.date) -> Dict[str, int]:
         raw = self.__dataFrame.loc[date.isoformat()]
