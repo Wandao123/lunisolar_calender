@@ -9,7 +9,4 @@ import lunisolar
 
 if __name__ == '__main__':
     calender = lunisolar.Calender(2020)
-    for delta in range(10):
-        date = dt.date(2020, 1, 1) + dt.timedelta(days=delta)
-        print(calender.LunarDate(date))
     calender.Write('lunisolar_calender.csv')

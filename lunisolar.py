@@ -37,18 +37,19 @@ class PhaseName(Enum):
 
 # Ref: https://emotionexplorer.blog.fc2.com/blog-entry-325.html
 class LunarPhase:
-    def __init__(self, year: int) -> None:
+    def __init__(self, beginningYear: int, endingYear: int) -> None:
         self.__datesOf: Dict[PhaseName, List[dt.datetime]] = {phase: [] for phase in PhaseName if phase != PhaseName.Null}
         #url = 'https://eco.mtk.nao.ac.jp/koyomi/yoko/2020/rekiyou203.html'
         url = 'https://eco.mtk.nao.ac.jp/cgi-bin/koyomi/cande/phenomena_p.cgi'
-        html = requests.post(url, data={'year': str(year)})
-        html.raise_for_status()
-        html.encoding = html.apparent_encoding
-        soup = BeautifulSoup(html.content, 'html.parser')
-        for row in soup.table.find_all('tr'):
-            columns = row.find_all('td')
-            if len(columns) > 0:
-                self.__datesOf[PhaseName(columns[3].text)].append(dt.datetime.fromisoformat(columns[0].text.replace('/', '-') + 'T' + columns[1].text + ':00'))
+        for year in range(beginningYear, endingYear + 1):
+            html = requests.post(url, data={'year': str(year)})
+            html.raise_for_status()
+            html.encoding = html.apparent_encoding
+            soup = BeautifulSoup(html.content, 'html.parser')
+            for row in soup.table.find_all('tr'):
+                columns = row.find_all('td')
+                if len(columns) > 0:
+                    self.__datesOf[PhaseName(columns[3].text)].append(dt.datetime.fromisoformat(columns[0].text.replace('/', '-') + 'T' + columns[1].text + ':00'))
 
     @property
     def DatesOf(self) -> Dict[PhaseName, List[dt.datetime]]:
@@ -101,21 +102,23 @@ class TermName(Enum):
 
 # Ref: https://emotionexplorer.blog.fc2.com/blog-entry-325.html
 class SolarTerm:
-    def __init__(self, year: int) -> None:
-        self.__dateOf: Dict[TermName, dt.datetime] = {}
+    def __init__(self, beginningYear: int, endingYear: int) -> None:
+        self.__datesOf: Dict[TermName, List[dt.datetime]] = {term: [] for term in TermName if term != TermName.Null}
         url = 'https://eco.mtk.nao.ac.jp/cgi-bin/koyomi/cande/phenomena_s.cgi'
-        html = requests.post(url, data={'year': str(year)})  # チェックボックスを外す方法？
-        html.raise_for_status()
-        html.encoding = html.apparent_encoding
-        soup = BeautifulSoup(html.content, 'html.parser')
-        for row in soup.table.find_all('tr'):
-            columns = row.find_all('td')
-            if len(columns) > 0 and columns[3].text == '二十四節気':
-                self.__dateOf[TermName(columns[5].text[:2])] = dt.datetime.fromisoformat(columns[0].text.replace('/', '-') + 'T' + columns[1].text + ':00')
+        for year in range(beginningYear, endingYear + 1):
+            html = requests.post(url, data={'year': str(year)})  # チェックボックスを外す方法？――BeautifulSoupのみでは不可。
+            html.raise_for_status()
+            html.encoding = html.apparent_encoding
+            soup = BeautifulSoup(html.content, 'html.parser')
+            for row in soup.table.find_all('tr'):
+                columns = row.find_all('td')
+                if len(columns) > 0 and columns[3].text == '二十四節気':
+                    self.__datesOf[TermName(columns[5].text[:2])].append(dt.datetime.fromisoformat(columns[0].text.replace('/', '-') + 'T' + columns[1].text + ':00'))
+
 
     @property
-    def DateOf(self) -> Dict[TermName, dt.datetime]:
-        return self.__dateOf
+    def DatesOf(self) -> Dict[TermName, List[dt.datetime]]:
+        return self.__datesOf
 
 # Ref: https://hogehuga.com/post-1235/
 class DataName(Enum):  # pandasのDataFrameの各項目。日本語との対応も兼ねる。
@@ -137,10 +140,8 @@ class DataName(Enum):  # pandasのDataFrameの各項目。日本語との対応�
 
 class Calender:
     def __init__(self, year: int) -> None:
-        self.__previousLunarPhase = LunarPhase(year - 1)
-        self.__currentLunarPhase = LunarPhase(year)
-        self.__previousSolarTerm = SolarTerm(year - 1)
-        self.__currentSolarTerm = SolarTerm(year)
+        self.__lunarPhase = LunarPhase(year - 1, year)
+        self.__solarTerm = SolarTerm(year - 1, year)
         start: dt.datetime
         end: dt.datetime
         start, end = self.__calcDateRange()
@@ -156,33 +157,35 @@ class Calender:
 
     def __calcDateRange(self) -> Tuple[dt.datetime]:
         newMoonDates: List[dt.datetime] =\
-            self.__previousLunarPhase.DatesOf[PhaseName.NewMoon]\
-            + self.__currentLunarPhase.DatesOf[PhaseName.NewMoon]\
-            + [self.__currentLunarPhase.DatesOf[PhaseName.NewMoon][-1] + dt.timedelta(days=29)]  # 翌年の朔月が未定なので、30日後（一箇月は29日間か30日間）を仮の朔月とする。
+            self.__lunarPhase.DatesOf[PhaseName.NewMoon]\
+            + [self.__lunarPhase.DatesOf[PhaseName.NewMoon][-1] + dt.timedelta(days=29)]  # 翌年の朔月が未定なので、30日後（一箇月は29日間か30日間）を仮の朔月とする。
         start: dt.datetime = None  # 昨年の冬至を含む月（陰暦の意味）の朔日。
         end: dt.datetime = None  # 作成する年の冬至を含む月（陰暦の意味）の翌月の朔日。
+        firstWinterSolstice: dt.datetime = min(self.__solarTerm.DatesOf[TermName.WinterSolstice])
+        lastWinterSolstice: dt.datetime = max(self.__solarTerm.DatesOf[TermName.WinterSolstice])
         for i in range(len(newMoonDates) - 1):
-            if newMoonDates[i] <= self.__previousSolarTerm.DateOf[TermName.WinterSolstice] < newMoonDates[i + 1]:
+            if newMoonDates[i] <= firstWinterSolstice< newMoonDates[i + 1]:
                 start = newMoonDates[i]
-            if newMoonDates[i] <= self.__currentSolarTerm.DateOf[TermName.WinterSolstice] < newMoonDates[i + 1]:
+            if newMoonDates[i] <= lastWinterSolstice < newMoonDates[i + 1]:
                 end = newMoonDates[i + 1]
         return start, end
 
     def __fillLunarPhases(self):
         self.__dataFrame.loc[:, DataName.LunarPhase] = PhaseName.Null
         for phaseName in PhaseName:
-            previous: List[dt.datetime] = self.__previousLunarPhase.DatesOf.get(phaseName)
-            current: List[dt.datetime] = self.__currentLunarPhase.DatesOf.get(phaseName)
-            if previous and current:
-                previous = [datetime for datetime in previous if datetime >= self.__dataFrame.index.to_pydatetime()[0]]
-                #current = [datetime for datetime in current if datetime <= self.__dataFrame.index.to_pydatetime()[-1]]  # 今年の月相の日付は必ず範囲内。
-                self.__dataFrame.loc[map(lambda datetime: datetime.date().isoformat(), previous + current), DataName.LunarPhase] = phaseName
-        self.__dataFrame.iloc[-1][DataName.LunarPhase] = PhaseName.NewMoon
+            dates: List[dt.datetime] = self.__lunarPhase.DatesOf.get(phaseName)
+            if dates:
+                dates = [datetime for datetime in dates if self.__dataFrame.index[0].to_pydatetime() <= datetime < self.__dataFrame.index[-1].to_pydatetime()]
+                self.__dataFrame.loc[map(lambda datetime: datetime.date().isoformat(), dates), DataName.LunarPhase] = phaseName
+        self.__dataFrame.iloc[-1][DataName.LunarPhase] = PhaseName.NewMoon  # 最終日はダミー（番兵として加える）。
 
     def __fillSolarTerms(self):
         self.__dataFrame.loc[:, DataName.SolarTerm] = TermName.Null
-        self.__dataFrame.loc[map(lambda datetime: datetime.date().isoformat(), self.__currentSolarTerm.DateOf.values()), DataName.SolarTerm] = list(self.__currentSolarTerm.DateOf.keys())
-        self.__dataFrame.at[self.__previousSolarTerm.DateOf[TermName.WinterSolstice].date().isoformat(), DataName.SolarTerm] = TermName.WinterSolstice
+        for termName in TermName:
+            dates: List[dt.datetime] = self.__solarTerm.DatesOf.get(termName)
+            if dates:
+                dates = [datetime for datetime in dates if self.__dataFrame.index[0].to_pydatetime() <= datetime < self.__dataFrame.index[-1].to_pydatetime()]
+                self.__dataFrame.loc[map(lambda datetime: datetime.date().isoformat(), dates), DataName.SolarTerm] = termName
 
     def __fillLunarDates(self):
         df = self.__dataFrame  # 長いので通称を付ける。
