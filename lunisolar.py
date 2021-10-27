@@ -12,6 +12,8 @@ import requests
 #from requests_html import HTMLSession
 from typing import Dict, List, Tuple
 
+# Ref: https://qiita.com/cohey0727/items/a1179db49a4f40a3b7c4
+# Ref: https://qiita.com/azumagoro/items/bafed453e12b7a5d4b2f
 class PhaseName(Enum):
     NewMoon = (0, '朔')
     FirstQuarter = (90, '上弦')
@@ -115,6 +117,24 @@ class SolarTerm:
     def DateOf(self) -> Dict[TermName, dt.datetime]:
         return self.__dateOf
 
+# Ref: https://hogehuga.com/post-1235/
+class DataName(Enum):  # pandasのDataFrameの各項目。日本語との対応も兼ねる。
+    SolarDate = (0, '太陽暦')
+    LunarPhase = (1, '月相')
+    SolarTerm = (2, '二十四節気')
+    LunarDay = (3, '日')
+    LunarMonth = (4, '月')
+    IsLeap = (5, '閏')
+    LunarYear = (6, '年')
+
+    def __init__(self, value: int, japanese: str) -> None:
+        self.Japanese = japanese
+
+    def __new__(cls, value: int, japanese: str) -> 'DataName':
+        obj = object.__new__(cls)
+        obj._value_ = value
+        return obj
+
 class Calender:
     def __init__(self, year: int) -> None:
         self.__previousLunarPhase = LunarPhase(year - 1)
@@ -126,8 +146,8 @@ class Calender:
         start, end = self.__calcDateRange()
         self.__dataFrame = pd.DataFrame(
             [],
-            index=pd.date_range(start=start.date(), end=end.date(), name='太陽暦'),
-            columns=['月相', '二十四節気', '日', '月', '年', '閏']  # 閏は真偽値。
+            index=pd.date_range(start=start.date(), end=end.date(), name=DataName.SolarDate),
+            columns=[name for name in DataName if name != DataName.SolarDate]
         )
         self.__fillLunarPhase()
         self.__fillSolarTerm()
@@ -147,32 +167,38 @@ class Calender:
         return start, end
 
     def __fillLunarPhase(self):
-        self.__dataFrame.loc[:, '月相'] = PhaseName.Null
+        self.__dataFrame.loc[:, DataName.LunarPhase] = PhaseName.Null
         for phaseName in PhaseName:
             previous: List[dt.datetime] = self.__previousLunarPhase.DatesOf.get(phaseName)
             current: List[dt.datetime] = self.__currentLunarPhase.DatesOf.get(phaseName)
             if previous and current:
                 previous = [datetime for datetime in previous if datetime >= self.__dataFrame.index.to_pydatetime()[0]]
                 #current = [datetime for datetime in current if datetime <= self.__dataFrame.index.to_pydatetime()[-1]]  # 今年の月相の日付は必ず範囲内。
-                self.__dataFrame.loc[map(lambda datetime: datetime.date().isoformat(), previous + current), '月相'] = phaseName
-        self.__dataFrame.iloc[-1]['月相'] = PhaseName.NewMoon
+                self.__dataFrame.loc[map(lambda datetime: datetime.date().isoformat(), previous + current), DataName.LunarPhase] = phaseName
+        self.__dataFrame.iloc[-1][DataName.LunarPhase] = PhaseName.NewMoon
 
     def __fillSolarTerm(self):
-        self.__dataFrame.loc[:, '二十四節気'] = TermName.Null
-        self.__dataFrame.loc[map(lambda datetime: datetime.date().isoformat(), self.__currentSolarTerm.DateOf.values()), '二十四節気'] = list(self.__currentSolarTerm.DateOf.keys())
-        self.__dataFrame.at[self.__previousSolarTerm.DateOf[TermName.WinterSolstice].date().isoformat(), '二十四節気'] = TermName.WinterSolstice
+        self.__dataFrame.loc[:, DataName.SolarTerm] = TermName.Null
+        self.__dataFrame.loc[map(lambda datetime: datetime.date().isoformat(), self.__currentSolarTerm.DateOf.values()), DataName.SolarTerm] = list(self.__currentSolarTerm.DateOf.keys())
+        self.__dataFrame.at[self.__previousSolarTerm.DateOf[TermName.WinterSolstice].date().isoformat(), DataName.SolarTerm] = TermName.WinterSolstice
 
     def LunarDate(self, date: dt.date) -> Dict[str, int]:
         raw = self.__dataFrame.loc[date.isoformat()]
         return {
-            'day': raw['日'],
-            'month': raw['月'],
-            'year': raw['年'],
-            'leap month': 1 if raw['閏'] else 0
+            'day': raw[DataName.LunarDay],
+            'month': raw[DataName.LunarMonth],
+            'leap': 1 if raw[DataName.IsLeap] else 0,
+            'year': raw[DataName.LunarYear]
         }
 
     def Write(self, filename: str='') -> None:
+        temp: pd.DataFrame = self.__dataFrame.copy()
+        #temp[DataName.LunarPhase] = temp[DataName.LunarPhase].map(lambda lunarPhase: lunarPhase.Japanese)
+        #temp[DataName.SolarTerm] = temp[DataName.SolarTerm].map(lambda solarTerm: solarTerm.Japanese)
+        temp.loc[:, DataName.LunarPhase:DataName.SolarTerm] = temp.loc[:, DataName.LunarPhase:DataName.SolarTerm].applymap(lambda cell: cell.Japanese)
+        temp.rename(columns=lambda dataName: dataName.Japanese, inplace=True)
+        temp.index.rename(DataName.SolarDate.Japanese, inplace=True)
         if filename:
-            self.__dataFrame.to_csv(filename, encoding='utf_8_sig')
+            temp.to_csv(filename, encoding='utf_8_sig')
         else:
-            print(self.__dataFrame)
+            print(temp)
