@@ -12,4 +12,4 @@ if __name__ == '__main__':
     for delta in range(10):
         date = dt.date(2020, 1, 1) + dt.timedelta(days=delta)
         print(calender.LunarDate(date))
-    calender.Write()
+    calender.Write('lunisolar_calender.csv')
