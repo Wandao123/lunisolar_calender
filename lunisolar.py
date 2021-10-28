@@ -5,7 +5,7 @@ __date__ = '2021/10/25'
 
 from bs4 import BeautifulSoup
 import datetime as dt
-from enum import Enum
+from enum import Enum, auto
 import numpy as np
 import pandas as pd
 import requests
@@ -102,19 +102,45 @@ class TermName(Enum):
 
 # Ref: https://emotionexplorer.blog.fc2.com/blog-entry-325.html
 class SolarTerm:
-    def __init__(self, beginningYear: int, endingYear: int) -> None:
+    class Mode(Enum):
+        TimeDividingMethod = auto()
+        SpaceDividingMethod = auto()
+
+    def __init__(self, beginningYear: int, endingYear: int, mode: Mode) -> None:
         self.__datesOf: Dict[TermName, List[dt.datetime]] = {term: [] for term in TermName if term != TermName.Null}
         url = 'https://eco.mtk.nao.ac.jp/cgi-bin/koyomi/cande/phenomena_s.cgi'
-        for year in range(beginningYear, endingYear + 1):
-            html = requests.post(url, data={'year': str(year)})  # チェックボックスを外す方法？――BeautifulSoupのみでは不可。
-            html.raise_for_status()
-            html.encoding = html.apparent_encoding
-            soup = BeautifulSoup(html.content, 'html.parser')
-            for row in soup.table.find_all('tr'):
-                columns = row.find_all('td')
-                if len(columns) > 0 and columns[3].text == '二十四節気':
-                    self.__datesOf[TermName(columns[5].text[:2])].append(dt.datetime.fromisoformat(columns[0].text.replace('/', '-') + 'T' + columns[1].text + ':00'))
-
+        if mode == self.Mode.TimeDividingMethod:
+            for year in range(beginningYear - 1, endingYear + 1):
+                html = requests.post(url, data={'year': str(year)})  # チェックボックスを外す方法？――BeautifulSoupのみでは不可。
+                html.raise_for_status()
+                html.encoding = html.apparent_encoding
+                soup = BeautifulSoup(html.content, 'html.parser')
+                for row in soup.table.find_all('tr'):
+                    columns = row.find_all('td')
+                    if len(columns) > 0 and columns[5].text[:2] == '冬至':
+                        self.__datesOf[TermName.WinterSolstice].append(dt.datetime.fromisoformat(columns[0].text.replace('/', '-') + 'T' + columns[1].text + ':00'))
+            for year in range(beginningYear, endingYear + 1):
+                previous: dt.datetime
+                current: dt.datetime
+                #previous, current = [date for date in sorted(self.__datesOf[TermName.WinterSolstice]) if date.year == year - 1 or date.year == year]
+                previous, current = sorted(list(filter(lambda date: date.year == year - 1 or date.year == year, self.__datesOf[TermName.WinterSolstice])))
+                delta = (current - previous) / 24
+                for i in range(1, 24):
+                    self.__datesOf[TermName((15 * i + TermName.WinterSolstice.Longitude) % 360)].append(previous + i * delta)
+            # 定気法に合わせるために、余分に取得した冬至を削除しているが、むしろ「昨年の冬至から今年の冬至まで」という仕様にするべき？
+            self.__datesOf[TermName.WinterSolstice] = list(filter(lambda date: date.year >= beginningYear, self.__datesOf[TermName.WinterSolstice]))
+        elif mode == self.Mode.SpaceDividingMethod:
+            for year in range(beginningYear, endingYear + 1):
+                html = requests.post(url, data={'year': str(year)})  # チェックボックスを外す方法？――BeautifulSoupのみでは不可。
+                html.raise_for_status()
+                html.encoding = html.apparent_encoding
+                soup = BeautifulSoup(html.content, 'html.parser')
+                for row in soup.table.find_all('tr'):
+                    columns = row.find_all('td')
+                    if len(columns) > 0 and columns[3].text == '二十四節気':
+                        self.__datesOf[TermName(columns[5].text[:2])].append(dt.datetime.fromisoformat(columns[0].text.replace('/', '-') + 'T' + columns[1].text + ':00'))
+        else:
+            raise TypeError(str(mode.value) + ' is not included in the Mode type.')
 
     @property
     def DatesOf(self) -> Dict[TermName, List[dt.datetime]]:
