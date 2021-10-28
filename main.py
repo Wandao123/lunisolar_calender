@@ -10,5 +10,5 @@ from pandas.core.indexes.datetimes import date_range
 import lunisolar
 
 if __name__ == '__main__':
-    calender = lunisolar.Calender(2021, lunisolar.Calender.Mode.Chinese, lunisolar.SolarTerm.Mode.TimeDividingMethod)
+    calender = lunisolar.Calender(2017, 2021)
     calender.Write('lunisolar_calender.csv')

@@ -168,10 +168,10 @@ class Calender:
         Japanese = '天保暦'
         Chinese = '時憲暦'
 
-    def __init__(self, year: int, nationMode: Mode, solarTermMode: SolarTerm.Mode) -> None:
+    def __init__(self, beginningYear: int, endingYear: int, nationMode: Mode=Mode.Chinese, solarTermMode: SolarTerm.Mode=SolarTerm.Mode.TimeDividingMethod) -> None:
         self.__mode = nationMode
-        self.__lunarPhase = LunarPhase(year - 1, year)
-        self.__solarTerm = SolarTerm(year - 1, year, solarTermMode)
+        self.__lunarPhase = LunarPhase(beginningYear - 1, endingYear)
+        self.__solarTerm = SolarTerm(beginningYear - 1, endingYear, solarTermMode)
         start: dt.datetime
         end: dt.datetime
         start, end = self.__calcDateRange()
@@ -247,7 +247,7 @@ class Calender:
                     month += 1
                 isLeap = False
             else:
-                if (~df.loc[df.index < newMoonIndices[i], DataName.IsLeap]).all():  # その年の最初の閏月か？
+                if (~df.loc[(df.index < newMoonIndices[i]) & (df[DataName.LunarYear] == df.loc[newMoonIndices[i - 1], DataName.LunarYear]), DataName.IsLeap]).all():  # その年の最初の閏月か？　表の作り方から、iは1以上。
                     isLeap = True
                 else:
                     isLeap = False
