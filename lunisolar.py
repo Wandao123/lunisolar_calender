@@ -122,7 +122,6 @@ class SolarTerm:
             for year in range(beginningYear, endingYear + 1):
                 previous: dt.datetime
                 current: dt.datetime
-                #previous, current = [date for date in sorted(self.__datesOf[TermName.WinterSolstice]) if date.year == year - 1 or date.year == year]
                 previous, current = sorted(list(filter(lambda date: date.year == year - 1 or date.year == year, self.__datesOf[TermName.WinterSolstice])))
                 delta = (current - previous) / 24
                 for i in range(1, 24):
@@ -165,9 +164,14 @@ class DataName(Enum):  # pandasのDataFrameの各項目。日本語との対応�
         return obj
 
 class Calender:
-    def __init__(self, year: int) -> None:
+    class Mode(Enum):
+        Japanese = '天保暦'
+        Chinese = '時憲暦'
+
+    def __init__(self, year: int, nationMode: Mode, solarTermMode: SolarTerm.Mode) -> None:
+        self.__mode = nationMode
         self.__lunarPhase = LunarPhase(year - 1, year)
-        self.__solarTerm = SolarTerm(year - 1, year, SolarTerm.Mode.TimeDividingMethod)
+        self.__solarTerm = SolarTerm(year - 1, year, solarTermMode)
         start: dt.datetime
         end: dt.datetime
         start, end = self.__calcDateRange()
@@ -226,13 +230,13 @@ class Calender:
             if df.loc[oneMonthPeriod, DataName.SolarTerm].isin({TermName.WinterSolstice}).any():
                 month = 11
                 isLeap = False
-            elif df.loc[oneMonthPeriod, DataName.SolarTerm].isin({TermName.VernalEquinox}).any():
+            elif self.__mode == self.Mode.Japanese and df.loc[oneMonthPeriod, DataName.SolarTerm].isin({TermName.VernalEquinox}).any():
                 month = 2
                 isLeap = False
-            elif df.loc[oneMonthPeriod, DataName.SolarTerm].isin({TermName.SummerSolstice}).any():
+            elif self.__mode == self.Mode.Japanese and df.loc[oneMonthPeriod, DataName.SolarTerm].isin({TermName.SummerSolstice}).any():
                 month = 5
                 isLeap = False
-            elif df.loc[oneMonthPeriod, DataName.SolarTerm].isin({TermName.AutumnalEquinox}).any():
+            elif self.__mode == self.Mode.Japanese and df.loc[oneMonthPeriod, DataName.SolarTerm].isin({TermName.AutumnalEquinox}).any():
                 month = 8
                 isLeap = False
             elif df.loc[oneMonthPeriod, DataName.SolarTerm].isin(evenSolarTerm).any():
