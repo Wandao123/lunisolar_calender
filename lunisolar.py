@@ -167,7 +167,7 @@ class DataName(Enum):  # pandasのDataFrameの各項目。日本語との対応�
 class Calender:
     def __init__(self, year: int) -> None:
         self.__lunarPhase = LunarPhase(year - 1, year)
-        self.__solarTerm = SolarTerm(year - 1, year)
+        self.__solarTerm = SolarTerm(year - 1, year, SolarTerm.Mode.TimeDividingMethod)
         start: dt.datetime
         end: dt.datetime
         start, end = self.__calcDateRange()
